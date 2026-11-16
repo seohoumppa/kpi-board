@@ -85,7 +85,7 @@ function render(d){
   const P=d.plan,today=D(d.generatedKst.slice(0,10)),start=D(P.start);
   const logs={a1:d.logs.a1.map(r=>({...r,t:new Date(r.kst.replace(' ','T')+':00+09:00').getTime()})),a2:d.logs.a2.map(r=>({...r,t:new Date(r.kst.replace(' ','T')+':00+09:00').getTime()}))};
   const last=(a,k)=>{for(let i=a.length-1;i>=0;i--)if(a[i][k]!=null)return a[i];return null};
-  const startVal=(a,k)=>{const sv=d.starts&&d.starts[a]&&d.starts[a][k];if(sv!=null)return sv;let v=null;for(const r of a)if(r.t<start&&r[k]!=null)v=r[k];if(v==null){const f=a.find(r=>r[k]!=null);v=f?f[k]:0}return v};
+  const startVal=(a,k)=>{const ac=a===logs.a1?'a1':a===logs.a2?'a2':null,sv=ac&&d.starts&&d.starts[ac]?d.starts[ac][k]:null;if(sv!=null)return sv;let v=null;for(const r of a)if(r.t<start&&r[k]!=null)v=r[k];if(v==null){const f=a.find(r=>r[k]!=null);v=f?f[k]:0}return v};
   const withStart=(a,k,pts)=>[[start,startVal(a,k)],...pts.map(p=>[D(p[0]),p[1]])];
   const NAME=d.names;
   const dayN=Math.floor((today-start)/DAY)+1,total=Math.floor((D(P.end)-start)/DAY)+1,gateD=Math.ceil((D(P.gate.checkDate)-today)/DAY);
