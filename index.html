@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Dashboard</title>
+<style>
+:root{--bg:#f7f7f5;--card:#fff;--ink:#1d1d1f;--sub:#6b6b70;--line:#e4e4e0;--grid:#eeeeea;
+--a1:#2f6fde;--a2:#d9822b;--good:#1f9d55;--warn:#d4a017;--bad:#d64545;--target:#9a9aa0}
+@media (prefers-color-scheme:dark){:root{--bg:#141416;--card:#1d1d20;--ink:#ececee;--sub:#9a9aa2;--line:#2c2c31;--grid:#26262a;
+--a1:#6b9cf0;--a2:#eba05a;--good:#3dbb73;--warn:#e2b93b;--bad:#ee6b6b;--target:#77777e}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:22px;margin:0 0 2px}h2{font-size:16px;margin:0 0 12px}
+.sub{color:var(--sub);font-size:13px}
+.grid{display:grid;gap:12px}.k4{grid-template-columns:repeat(4,1fr)}.k2{grid-template-columns:repeat(2,1fr)}
+@media(max-width:820px){.k4{grid-template-columns:repeat(2,1fr)}.k2{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.kpi .lab{font-size:12.5px;color:var(--sub)}.kpi .val{font-size:26px;font-weight:700;margin:2px 0;font-variant-numeric:tabular-nums}
+.kpi .val small{font-size:13px;font-weight:500;color:var(--sub)}.kpi .meta{font-size:12.5px;color:var(--sub)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:1px}
+.bar{height:6px;background:var(--grid);border-radius:3px;margin-top:8px;overflow:hidden}.bar>i{display:block;height:100%;border-radius:3px}
+section{margin-top:22px}
+.tabs{display:flex;gap:6px}.tabs button{border:1px solid var(--line);background:var(--card);color:var(--sub);border-radius:999px;padding:4px 12px;font-size:13px;cursor:pointer}
+.tabs button.on{color:var(--ink);border-color:var(--ink)}
+.head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap}
+svg{display:block;width:100%;height:auto}svg text{fill:var(--sub);font-size:11px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--sub);margin-top:6px}
+.legend span{display:inline-flex;align-items:center;gap:5px}.sw{width:16px;height:0;border-top:2px solid}
+table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line)}th{color:var(--sub);font-weight:500;font-size:12.5px}
+td.r,th.r{text-align:right}
+.lock{min-height:100vh;display:flex;align-items:center;justify-content:center}
+.lock form{width:300px}.lock input[type=password]{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font-size:15px;margin:12px 0 8px}
+.lock button{width:100%;padding:10px;border:0;border-radius:8px;background:var(--ink);color:var(--bg);font-size:15px;cursor:pointer}
+.err{color:var(--bad);font-size:13px;min-height:18px}
+ul.miss{margin:0;padding-left:18px}.tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12px;padding:5px 8px;border-radius:6px;display:none;white-space:nowrap;z-index:9}
+</style>
+</head>
+<body>
+<div id="lock" class="lock"><form id="f">
+  <h1>Dashboard</h1><div class="sub">비밀번호를 입력하세요.</div>
+  <input id="pw" type="password" autocomplete="current-password" autofocus>
+  <label class="sub"><input id="rem" type="checkbox"> 이 기기에서 기억</label>
+  <div class="err" id="err"></div><button>열기</button>
+</form></div>
+<div id="app" class="wrap" hidden></div>
+<div class="tip" id="tip"></div>
+<script>
+let BLOB=null;
+const loadBlob=async()=>{if(!BLOB){const r=await fetch('data.json?t='+Date.now(),{cache:'no-store'});BLOB=await r.json()}return BLOB};
+const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function decrypt(pw){
+  await loadBlob();
+  const km=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);
+  const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt:b64(BLOB.s),iterations:BLOB.n,hash:'SHA-256'},km,{name:'AES-GCM',length:256},false,['decrypt']);
+  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64(BLOB.i)},key,b64(BLOB.d));
+  let bytes=pt;if(BLOB.z){bytes=await new Response(new Blob([pt]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer()}
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+async function unlock(pw,remember){
+  try{const d=await decrypt(pw);if(remember)localStorage.setItem('gdpw',pw);
+    document.getElementById('lock').hidden=true;document.getElementById('app').hidden=false;render(d);}
+  catch(e){localStorage.removeItem('gdpw');document.getElementById('err').textContent='비밀번호가 맞지 않습니다.';}
+}
+document.getElementById('f').onsubmit=e=>{e.preventDefault();document.getElementById('err').textContent='여는 중…';unlock(document.getElementById('pw').value,document.getElementById('rem').checked)};
+const saved=localStorage.getItem('gdpw');if(saved)unlock(saved,true);
+
+// ---------- helpers ----------
+const DAY=864e5,D=s=>new Date(s+'T00:00:00+09:00').getTime();
+const fmt=n=>n==null?'—':(Math.round(n*10)/10).toLocaleString('ko-KR');
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function interp(pts,t){if(!pts.length)return null;if(t<=pts[0][0])return pts[0][1];
+  for(let i=1;i<pts.length;i++){const[a,va]=pts[i-1],[b,vb]=pts[i];if(t<=b)return va+(vb-va)*(t-a)/(b-a)}return pts[pts.length-1][1]}
+function status(actual,target){if(actual==null||target==null||target<=0)return{c:'var(--sub)',t:'—'};const r=actual/target;
+  return r>=1?{c:'var(--good)',t:'달성'}:r>=.7?{c:'var(--warn)',t:'주의'}:{c:'var(--bad)',t:'미달'}}
+const nextMs=(pts,t)=>pts.find(p=>D(p[0])>t);
+const md=s=>{const d=new Date(D(s)+9*36e5);return(d.getUTCMonth()+1)+'/'+d.getUTCDate()};
+const ym=s=>s.slice(2,4)+'.'+s.slice(5,7);
+const tip=document.getElementById('tip');
+function hover(el,txt){el.addEventListener('mousemove',e=>{tip.style.display='block';tip.textContent=txt;tip.style.left=(e.clientX+12)+'px';tip.style.top=(e.clientY-28)+'px'});el.addEventListener('mouseleave',()=>tip.style.display='none')}
+
+function render(d){
+  const P=d.plan,today=D(d.generatedKst.slice(0,10)),start=D(P.start);
+  const logs={a1:d.logs.a1.map(r=>({...r,t:new Date(r.kst.replace(' ','T')+':00+09:00').getTime()})),a2:d.logs.a2.map(r=>({...r,t:new Date(r.kst.replace(' ','T')+':00+09:00').getTime()}))};
+  const last=(a,k)=>{for(let i=a.length-1;i>=0;i--)if(a[i][k]!=null)return a[i];return null};
+  const startVal=(a,k)=>{let v=null;for(const r of a)if(r.t<start&&r[k]!=null)v=r[k];if(v==null){const f=a.find(r=>r[k]!=null);v=f?f[k]:0}return v};
+  const withStart=(a,k,pts)=>[[start,startVal(a,k)],...pts.map(p=>[D(p[0]),p[1]])];
+  const NAME=d.names;
+  const dayN=Math.floor((today-start)/DAY)+1,total=Math.floor((D(P.end)-start)/DAY)+1,gateD=Math.ceil((D(P.gate.checkDate)-today)/DAY);
+  const app=document.getElementById('app');let h='';
+  h+=`<div class="head"><div><h1>대시보드</h1><div class="sub">계획 기준 · 계획 ${dayN>0?dayN+'일차':'시작 전'} / ${total}일 · 퇴사 판단 점검(6/30)까지 D-${gateD} · 갱신 ${d.generatedKst} KST</div></div></div>`;
+
+  // KPI tiles
+  const tiles=[];
+  for(const a of ['a1','a2']){
+    const L=last(logs[a],'threads_followers'),v=L?L.threads_followers:null,pts=withStart(logs[a],'threads_followers',P.followers[a].base);
+    const tg=interp(pts,today),st=status(v,tg),nx=nextMs(P.followers[a].base,today);
+    tiles.push(`<div class="card kpi"><div class="lab"><span class="dot" style="background:var(--${a})"></span>${NAME[a]} Threads 팔로워</div>
+      <div class="val">${fmt(v)} <small>/ 1만</small></div><div class="meta"><span style="color:${st.c}">● ${st.t}</span> · 오늘 목표 ${fmt(Math.round(tg))} · 다음 ${nx?fmt(nx[1])+' ('+md(nx[0])+')':'—'}</div>
+      <div class="bar"><i style="width:${Math.min(100,(v||0)/100)}%;min-width:2px;background:var(--${a})"></i></div></div>`);
+  }
+  for(const a of ['a1','a2']){
+    const L=last(logs[a],'median_views_per_post_7d'),v=L?L.median_views_per_post_7d:null,pts=withStart(logs[a],'median_views_per_post_7d',P.median[a]);
+    const tg=interp(pts,today),st=status(v,tg),nx=nextMs(P.median[a],today);
+    tiles.push(`<div class="card kpi"><div class="lab"><span class="dot" style="background:var(--${a})"></span>${NAME[a]} 게시당 조회 중앙값</div>
+      <div class="val">${fmt(v)}</div><div class="meta"><span style="color:${st.c}">● ${st.t}</span> · 오늘 목표 ${fmt(Math.round(tg))} · ${nx?md(nx[0])+' '+fmt(nx[1]):'—'}</div></div>`);
+  }
+  // 합산
+  const subNow=(()=>{let s=0,any=false;for(const a of ['a1','a2']){const L=last(logs[a],'subscribers');if(L){s+=L.subscribers;any=true}}return any?s:null})();
+  const subPts=P.subscribers.map(p=>[D(p[0]),p[1]]),subTg=interp([[start,0],...subPts],today),subNx=nextMs(P.subscribers,today);
+  const ymNow=d.generatedKst.slice(0,7),rev=d.manual.revenue_manwon||{},revNow=rev[ymNow]??0,revTg=P.revenue[ymNow];
+  const months=Object.keys(P.revenue);const firstRev=months.find(m=>P.revenue[m][0]>0);
+  const viewsW={a1:last(logs.a1,'threads_views_7d'),a2:last(logs.a2,'threads_views_7d')};
+  const gate=gateStatus(d,subNow);
+  tiles.push(`<div class="card kpi"><div class="lab">보유 구독자 (두 계정 합산)</div><div class="val">${fmt(subNow)}</div>
+    <div class="meta">오늘 목표 ${fmt(Math.round(subTg))} · 다음 ${subNx?fmt(subNx[1])+' ('+md(subNx[0])+')':'—'}</div></div>`);
+  tiles.push(`<div class="card kpi"><div class="lab">이번 달 매출 (${ymNow.slice(5)}월)</div><div class="val">₩${fmt(revNow)}<small>만</small></div>
+    <div class="meta">${revTg?'목표 ₩'+fmt(revTg[0])+'만 · 도전 ₩'+fmt(revTg[1])+'만':'이번 달 목표 없음 · 첫 매출 목표 '+ym(firstRev)+' ₩'+P.revenue[firstRev][0]+'만'}</div></div>`);
+  tiles.push(`<div class="card kpi"><div class="lab">Threads 7일 조회 합계</div><div class="val">${fmt((viewsW.a1?.threads_views_7d||0)+(viewsW.a2?.threads_views_7d||0))}</div>
+    <div class="meta"><span style="color:var(--a1)">${NAME.a1} ${fmt(viewsW.a1?.threads_views_7d)}</span> · <span style="color:var(--a2)">${NAME.a2} ${fmt(viewsW.a2?.threads_views_7d)}</span></div></div>`);
+  tiles.push(`<div class="card kpi"><div class="lab">퇴사 판단 게이트</div><div class="val">${gate.filter(g=>g.ok).length}<small> / ${gate.length} 충족</small></div>
+    <div class="meta">기본안 통과 예상: 2027-06-30 점검</div></div>`);
+  h+=`<section class="grid k4">${tiles.join('')}</section>`;
+
+  // follower charts
+  h+=`<section><div class="head"><h2>Threads 팔로워: 실제 vs 목표</h2><div class="tabs" id="rng"><button data-r="near" class="on">~12월</button><button data-r="year">1년</button></div></div>
+     <div class="grid k2"><div class="card" id="c_a1"></div><div class="card" id="c_a2"></div></div></section>`;
+
+  // leading table
+  const rows=[];
+  for(const a of ['a1','a2']){
+    const add=(lab,k,pts,unit='')=>{const L=last(logs[a],k),v=L?L[k]:null;const tg=pts?interp(withStart(logs[a],k,pts),today):null;const st=status(v,tg);const nx=pts?nextMs(pts,today):null;
+      rows.push(`<tr><td><span class="dot" style="background:var(--${a})"></span>${NAME[a]}</td><td>${lab}</td><td class="r">${fmt(v)}${unit}</td><td class="r">${tg==null?'—':fmt(Math.round(tg*10)/10)}</td><td class="r">${nx?fmt(nx[1])+' <span class="sub">('+md(nx[0])+')</span>':'—'}</td><td><span style="color:${st.c}">● ${st.t}</span></td></tr>`)};
+    add('Threads 팔로워','threads_followers',P.followers[a].base);
+    add('Instagram 팔로워','ig_followers',P.ig[a]);
+    add('게시당 조회 중앙값','median_views_per_post_7d',P.median[a]);
+    add('1천 조회당 팔로우','follows_per_1k_views',P.f1k[a]);
+  }
+  h+=`<section class="card"><h2>지표별 현황</h2><div style="overflow-x:auto"><table><thead><tr><th>계정</th><th>지표</th><th class="r">현재</th><th class="r">오늘 기준 목표</th><th class="r">다음 마일스톤</th><th>상태</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>
+    <div class="sub" style="margin-top:8px">오늘 기준 목표 = 11/16 출발값에서 다음 마일스톤까지 직선으로 이은 값. ● 달성 100% 이상 · ● 주의 70~99% · ● 미달 70% 미만 (🔴 2주 연속이면 교정 규칙 발동)</div></section>`;
+
+  // revenue
+  h+=`<section class="card"><h2>월 매출: 목표 vs 실제 (만원)</h2><div id="c_rev"></div>
+    <div class="legend"><span><i class="sw" style="border-top:8px solid var(--grid);width:12px"></i>기본 목표</span><span><i class="sw" style="border-color:var(--target);border-top-style:dashed"></i>도전 목표</span><span><i class="sw" style="border-top:8px solid var(--good);width:12px"></i>실제</span></div></section>`;
+
+  // gate + miss
+  h+=`<section class="grid k2"><div class="card"><h2>퇴사 판단 게이트 (모두 충족 시 통과)</h2><table><tbody>${gate.map(g=>`<tr><td>${g.ok?'✅':'⬜'}</td><td>${g.lab}</td><td class="r">${g.now}</td></tr>`).join('')}</tbody></table></div>
+    <div class="card"><h2>이번 주 미달 항목</h2>${d.miss.items.length?'<ul class="miss">'+d.miss.items.map(x=>'<li>'+x.replace(/</g,'&lt;')+'</li>').join('')+'</ul>':'<div class="sub">미달 항목 없음</div>'}
+    <div class="sub" style="margin-top:10px">월요일 주간 대시보드(${d.miss.date||'—'}) 기준. 미달 시 조치는 에디와 담당 PO가 교정 규칙에 따라 진행합니다.</div></div></section>`;
+  app.innerHTML=h;
+
+  const drawF=r=>{for(const a of ['a1','a2'])followerChart(document.getElementById('c_'+a),a,NAME[a],logs[a],P,start,today,r)};
+  drawF('near');
+  document.querySelectorAll('#rng button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#rng button').forEach(x=>x.classList.toggle('on',x===b));drawF(b.dataset.r)});
+  revChart(document.getElementById('c_rev'),P.revenue,rev,ymNow);
+}
+
+function gateStatus(d,subNow){
+  const g=d.plan.gate,m=d.manual,rev=m.revenue_manwon||{};
+  const ks=Object.keys(rev).sort().slice(-3),net=ks.length?ks.reduce((s,k)=>s+(rev[k]*0.85-30),0)/3:null;
+  return[
+    {lab:`직전 3개월 평균 순수익 ₩${g.netAvg3m}만 이상 (추정)`,now:net==null?'₩0만':'₩'+fmt(Math.round(net))+'만',ok:net!=null&&net>=g.netAvg3m},
+    {lab:`런웨이 생활비 ${g.runwayMonths}개월 이상`,now:m.runway_months==null?'미입력':m.runway_months+'개월',ok:(m.runway_months||0)>=g.runwayMonths},
+    {lab:`유료 고객 누적 ${g.clients}곳 이상`,now:(m.paying_clients||0)+'곳',ok:(m.paying_clients||0)>=g.clients},
+    {lab:`반복 매출(월 관리) ${g.recurring}곳 이상`,now:(m.recurring_clients||0)+'곳',ok:(m.recurring_clients||0)>=g.recurring},
+    {lab:`보유 구독자 ${fmt(g.subscribers)}명 이상`,now:fmt(subNow||0)+'명',ok:(subNow||0)>=g.subscribers},
+    {lab:'법무 점검 (겸업·사업자등록·보험)',now:m.legal_check_done?'완료':'전',ok:!!m.legal_check_done},
+  ];
+}
+
+function followerChart(el,acc,name,log,P,start,today,range){
+  const W=520,H=260,ml=46,mr=12,mt=14,mb=28;
+  const x0=D('2026-11-09'),x1=range==='near'?D('2026-12-31'):D(P.end);
+  const sv=(()=>{let v=null;for(const r of log)if(r.t<start&&r.threads_followers!=null)v=r.threads_followers;return v??(log[0]?.threads_followers||0)})();
+  const base=[[start,sv],...P.followers[acc].base.map(p=>[D(p[0]),p[1]])].filter(p=>p[0]<=x1+40*DAY);
+  const chal=[[start,sv],...P.followers[acc].challenge.map(p=>[D(p[0]),p[1]])].filter(p=>p[0]<=x1+40*DAY);
+  const act=log.filter(r=>r.threads_followers!=null).map(r=>[r.t,r.threads_followers]);
+  const clip=pts=>{const out=[];for(let i=0;i<pts.length;i++){const p=pts[i];if(p[0]<=x1)out.push(p);else{if(i>0&&pts[i-1][0]<x1){const v=interp(pts,x1);out.push([x1,v])}break}}return out};
+  const b=clip(base),c=clip(chal);
+  const yMax=niceMax(Math.max(...b.map(p=>p[1]),...c.map(p=>p[1]),...act.map(p=>p[1]),10));
+  const X=t=>ml+(t-x0)/(x1-x0)*(W-ml-mr),Y=v=>mt+(1-v/yMax)*(H-mt-mb);
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${name} 팔로워 차트">`;
+  for(let i=0;i<=4;i++){const v=yMax*i/4;s+=`<line x1="${ml}" x2="${W-mr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/><text x="${ml-6}" y="${Y(v)+4}" text-anchor="end">${v>=1000?(v/1000)+'천':v}</text>`}
+  // x ticks: month starts
+  const dt=new Date(x0+9*36e5);let m=new Date(Date.UTC(dt.getUTCFullYear(),dt.getUTCMonth()+1,1));
+  const ticks=[];if(range==='near'){for(let t=D('2026-11-16');t<=x1;t+=7*DAY)ticks.push([t,md(new Date(t+9*36e5).toISOString().slice(0,10))])}
+  else{while(m.getTime()-9*36e5<=x1){const k=m.toISOString().slice(0,10);ticks.push([D(k),(m.getUTCMonth()+1)+'월']);m=new Date(Date.UTC(m.getUTCFullYear(),m.getUTCMonth()+2,1))}}
+  for(const[t,l]of ticks)s+=`<text x="${X(t)}" y="${H-8}" text-anchor="middle">${l}</text>`;
+  const path=p=>p.map((q,i)=>(i?'L':'M')+X(q[0]).toFixed(1)+' '+Y(q[1]).toFixed(1)).join('');
+  s+=`<path d="${path(c)}" fill="none" stroke="var(--target)" stroke-width="1.5" stroke-dasharray="2 4"/>`;
+  s+=`<path d="${path(b)}" fill="none" stroke="var(--target)" stroke-width="1.5" stroke-dasharray="6 4"/>`;
+  s+=`<line x1="${X(today)}" x2="${X(today)}" y1="${mt}" y2="${H-mb}" stroke="var(--line)"/>`;
+  if(act.length)s+=`<path d="${path(act)}" fill="none" stroke="var(--${acc})" stroke-width="2.5" stroke-linejoin="round"/>`;
+  s+=act.map(p=>`<circle class="pt" data-t="${new Date(p[0]+9*36e5).toISOString().slice(5,16).replace('T',' ')} · ${p[1]}명" cx="${X(p[0])}" cy="${Y(p[1])}" r="3.5" fill="var(--${acc})"/>`).join('');
+  s+=P.followers[acc].base.filter(p=>D(p[0])<=x1).map(p=>`<circle class="pt" data-t="기본 목표 ${md(p[0])} · ${p[1].toLocaleString('ko-KR')}명" cx="${X(D(p[0]))}" cy="${Y(p[1])}" r="3" fill="var(--card)" stroke="var(--target)"/>`).join('');
+  s+='</svg>';
+  const L=act.length?act[act.length-1][1]:null;
+  el.innerHTML=`<div style="display:flex;justify-content:space-between"><b>${name}</b><span class="sub">현재 ${fmt(L)}명</span></div>${s}
+   <div class="legend"><span><i class="sw" style="border-color:var(--${acc});border-top-width:3px"></i>실제</span><span><i class="sw" style="border-color:var(--target);border-top-style:dashed"></i>기본 목표</span><span><i class="sw" style="border-color:var(--target);border-top-style:dotted"></i>도전 목표</span></div>`;
+  el.querySelectorAll('.pt').forEach(n=>hover(n,n.dataset.t));
+}
+function niceMax(v){const p=Math.pow(10,Math.floor(Math.log10(v)));for(const k of[1,1.5,2,2.5,3,4,5,6,8,10])if(k*p>=v)return k*p;return 10*p}
+
+function revChart(el,plan,actual,ymNow){
+  const ks=Object.keys(plan),W=1040,H=240,ml=46,mr=10,mt=14,mb=28;
+  const yMax=niceMax(Math.max(...ks.map(k=>plan[k][1]),...Object.values(actual),10));
+  const bw=(W-ml-mr)/ks.length,Y=v=>mt+(1-v/yMax)*(H-mt-mb);
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="월 매출 차트">`;
+  for(let i=0;i<=4;i++){const v=yMax*i/4;s+=`<line x1="${ml}" x2="${W-mr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/><text x="${ml-6}" y="${Y(v)+4}" text-anchor="end">${v}</text>`}
+  ks.forEach((k,i)=>{const x=ml+i*bw,[b,c]=plan[k],a=actual[k];
+    s+=`<rect class="pt" data-t="${k} 기본 ₩${b}만 · 도전 ₩${c}만${a!=null?' · 실제 ₩'+a+'만':''}" x="${x+bw*.18}" y="${Y(b)}" width="${bw*.64}" height="${Y(0)-Y(b)}" fill="var(--grid)" rx="3"/>`;
+    if(a!=null)s+=`<rect class="pt" data-t="${k} 실제 ₩${a}만 (목표 ₩${b}만)" x="${x+bw*.32}" y="${Y(a)}" width="${bw*.36}" height="${Y(0)-Y(a)}" fill="var(--good)" rx="2"/>`;
+    s+=`<line x1="${x+bw*.12}" x2="${x+bw*.88}" y1="${Y(c)}" y2="${Y(c)}" stroke="var(--target)" stroke-dasharray="4 3" stroke-width="1.5"/>`;
+    s+=`<text x="${x+bw/2}" y="${H-8}" text-anchor="middle" ${k===ymNow?'style="fill:var(--ink);font-weight:700"':''}>${k.slice(2,4)}.${k.slice(5)}</text>`});
+  el.innerHTML=s+'</svg>';el.querySelectorAll('.pt').forEach(n=>hover(n,n.dataset.t));
+}
+</script>
+</body>
+</html>
