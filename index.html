@@ -10,7 +10,7 @@
 --a1:#2f6fde;--a2:#d9822b;--good:#1f9d55;--warn:#d4a017;--bad:#d64545;--target:#9a9aa0}
 @media (prefers-color-scheme:dark){:root{--bg:#141416;--card:#1d1d20;--ink:#ececee;--sub:#9a9aa2;--line:#2c2c31;--grid:#26262a;
 --a1:#6b9cf0;--a2:#eba05a;--good:#3dbb73;--warn:#e2b93b;--bad:#ee6b6b;--target:#77777e}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif}
+[hidden]{display:none!important}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif}
 .wrap{max-width:1080px;margin:0 auto;padding:20px 16px 48px}
 h1{font-size:22px;margin:0 0 2px}h2{font-size:16px;margin:0 0 12px}
 .sub{color:var(--sub);font-size:13px}
@@ -85,7 +85,7 @@ function render(d){
   const P=d.plan,today=D(d.generatedKst.slice(0,10)),start=D(P.start);
   const logs={a1:d.logs.a1.map(r=>({...r,t:new Date(r.kst.replace(' ','T')+':00+09:00').getTime()})),a2:d.logs.a2.map(r=>({...r,t:new Date(r.kst.replace(' ','T')+':00+09:00').getTime()}))};
   const last=(a,k)=>{for(let i=a.length-1;i>=0;i--)if(a[i][k]!=null)return a[i];return null};
-  const startVal=(a,k)=>{let v=null;for(const r of a)if(r.t<start&&r[k]!=null)v=r[k];if(v==null){const f=a.find(r=>r[k]!=null);v=f?f[k]:0}return v};
+  const startVal=(a,k)=>{const sv=d.starts&&d.starts[a]&&d.starts[a][k];if(sv!=null)return sv;let v=null;for(const r of a)if(r.t<start&&r[k]!=null)v=r[k];if(v==null){const f=a.find(r=>r[k]!=null);v=f?f[k]:0}return v};
   const withStart=(a,k,pts)=>[[start,startVal(a,k)],...pts.map(p=>[D(p[0]),p[1]])];
   const NAME=d.names;
   const dayN=Math.floor((today-start)/DAY)+1,total=Math.floor((D(P.end)-start)/DAY)+1,gateD=Math.ceil((D(P.gate.checkDate)-today)/DAY);
